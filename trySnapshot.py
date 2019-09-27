@@ -2,15 +2,15 @@ import boto3
 import cv2
 from scipy.misc import imresize
 import time
-BUCKET_NAME = 'aws-rekognition-bucket' # replace with your bucket name
-KEY = 'asmaa1.JPEG' # replace with your object key
+BUCKET_NAME = 'bucket-name' # replace with your bucket name
+KEY = 'picture.JPEG' # replace with your object key
 
 s3 = boto3.resource('s3')
 img2 = ""
 frame = ""
 img_name = ""
 compare = False
-rec = 911108
+rec = 911108 #any random number
 # if __name__ == "__main__":
 #     main()
 
@@ -41,7 +41,7 @@ def main():
             cv2.imwrite(img_name, frame)
             print("{} written!".format(img_name))
             img_counter += 1
-            compare = recognize("asmaa1.JPEG", 'frame0.png')
+            compare = recognize("picture.JPEG", 'frame0.png')
             print("Compare value boolean: ", compare)
             # recognize(s3image, "frame0.png")
             if (compare == True):
@@ -61,20 +61,20 @@ def main():
     cv2.destroyAllWindows()
 
 def s3ImageDownload():
-    s3.meta.client.download_file('aws-rekognition-bucket', 'asmaa1.JPEG', 'asmaa1.JPEG')
+    s3.meta.client.download_file('bucket-name', 'picture.JPEG', 'picture.JPEG')
     print("S3")
-    #return "asmaa1.JPEG"
+    #return "picture.JPEG"
 
 def recognize(SourceFile, TargetFile):
     returnValue = False
     print("Recognize")
-    img = cv2.imread('asmaa1.JPEG', 1)
+    img = cv2.imread('picture.JPEG', 1)
     img = imresize(img, (800, 450))
-    #cv2.imshow('asma4', img)
+    #cv2.imshow('img', img)
     #print("Show")
 
     client = boto3.client('rekognition')
-    # with open("asma1.png", "rb") as image:
+    # with open("img.png", "rb") as image:
 
     imageSource = open(SourceFile, 'rb')
     imageTarget = open(TargetFile, 'rb')
@@ -100,7 +100,7 @@ def recognize(SourceFile, TargetFile):
 
 def expressions():
     print("Expressions")
-    photo = 'asmaa1.JPEG'
+    photo = 'picture.JPEG'
     client=boto3.client('rekognition')
 
     response = client.detect_faces(Image={'S3Object':{'Bucket':BUCKET_NAME,'Name':photo}},Attributes=["ALL"])
