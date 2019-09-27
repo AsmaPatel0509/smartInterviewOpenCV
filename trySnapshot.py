@@ -1,115 +1,85 @@
-import boto3
 import cv2
-from scipy.misc import imresize
 import time
-BUCKET_NAME = 'bucket-name' # replace with your bucket name
-KEY = 'picture.JPEG' # replace with your object key
+import boto3
+import pymysql
+from flask import Flask,request
 
-s3 = boto3.resource('s3')
-img2 = ""
-frame = ""
-img_name = ""
-compare = False
-rec = 911108 #any random number
-# if __name__ == "__main__":
-#     main()
+app = Flask(__name__)
 
-def main():
-    print("Main")
-    #s3ImageDownload()
-    print("Image downloaded from S3")
+@app.route("/")
+def fn1():
+    client = boto3.client('rekognition')
+    bucket = 'aws-bucket-name'
+    connection = pymysql.connect(
+            host = 'mydb.chsifs6arhem.us-east-1.rds.amazonaws.com',
+            user = 'username',
+            password = 'password',
+            db = 'dbname'
+        )
+    cursor1 = connection.cursor()
 
+    folder = input("Enter email-id:")
+    session = boto3.session.Session(region_name='region-name')
+    s3 = boto3.client('s3')
+    S3 = session.client('s3')
+    bucket = 'aws-bucket-name'
+
+    client = boto3.client('rekognition')
     cap = cv2.VideoCapture(0)
     print("capturing")
-    startTime = time.time()
-    print("start time: ", startTime)
+    img_counter = 0
+
+    userId = request.args.get("userId")
+    print("userId=",userId)
     while(True):
-        #time.sleep(5)
-        ret, frame = cap.read()
-        frame = cv2.flip(frame, 1)
-        cv2.imshow('frame', frame)
-        img_counter = 0
-        k = cv2.waitKey(1)
-        if k % 256 == 27:
-            # Esc pressed
-            print("Quitting...")
-            break
-        elif k % 256 == 32:
-            #Space pressed, takes snapshot
-            img_name = "frame{}.png".format(rec)
-            #Save snapshot
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = cv2.flip(frame, 1)
+            cv2.imshow('frame', frame)
+            k = cv2.waitKey(1)
+            if k % 256 == 27:
+                # Esc pressed
+                print("Quitting...")
+                break
+
+            img_name = "frame{}.png".format(img_counter)
             cv2.imwrite(img_name, frame)
             print("{} written!".format(img_name))
-            img_counter += 1
-            compare = recognize("picture.JPEG", 'frame0.png')
-            print("Compare value boolean: ", compare)
-            # recognize(s3image, "frame0.png")
-            if (compare == True):
-                print("User verified, continue")
-                break
-            else:
-                print("User not verified")
-        # else:
-        #     img_name = "frame{}.png".format(img_counter)
-        #     cv2.imwrite(img_name, frame)
-        #     print("{} written!".format(img_name))
-        #     img_counter += 1
-        #         #time.sleep(5)
 
-    expressions()
+            #Upload to S3
+            s3.upload_file("C:/path/to/image/directory/" +img_name, bucket, folder +"/" +img_name, ExtraArgs={'ACL':'public-read'})
+            print("Snapshot uploaded to S3.")
+
+            #NEEDS FIX!!!
+            #Link generation
+            link = "https://" + bucket + ".s3.amazonaws.com/" + folder + "/" + img_name
+            print("Link: ", link)
+
+            time.sleep(10)
+
+            #Expression Analysis
+            print("Analysing expressions")
+
+            response = client.detect_faces(Image={'S3Object': {'Bucket': bucket, 'Name': folder +'/frame0.png'}}, Attributes=["ALL"])
+            print('Detected faces for ' + img_name)
+            for faceDetail in response['FaceDetails']:
+                # print('The detected face is between ' + str(faceDetail['AgeRange']['Low'])
+                #       + ' and ' + str(faceDetail['AgeRange']['High']) + ' years old')
+                print('Here are the emotions:')
+                exp = faceDetail['Emotions']
+                print(exp)
+                for i in exp:
+                    cursor1.execute(
+                        "INSERT into userExpression(id, expression, confidence, imageName, imagePath) VALUES ('{}', '{}', '{}', '{}', '{}')".format(
+                            userId, str(i['Type']), str(i['Confidence']), img_name, link)
+                    )
+                    print("Inserted in RDS")
+                    connection.commit()
+
+            img_counter += 1
+
     cap.release()
     cv2.destroyAllWindows()
 
-def s3ImageDownload():
-    s3.meta.client.download_file('bucket-name', 'picture.JPEG', 'picture.JPEG')
-    print("S3")
-    #return "picture.JPEG"
-
-def recognize(SourceFile, TargetFile):
-    returnValue = False
-    print("Recognize")
-    img = cv2.imread('picture.JPEG', 1)
-    img = imresize(img, (800, 450))
-    #cv2.imshow('img', img)
-    #print("Show")
-
-    client = boto3.client('rekognition')
-    # with open("img.png", "rb") as image:
-
-    imageSource = open(SourceFile, 'rb')
-    imageTarget = open(TargetFile, 'rb')
-
-    response = client.compare_faces(SimilarityThreshold=70,
-                                    SourceImage={'Bytes': imageSource.read()},
-                                    TargetImage={'Bytes': imageTarget.read()})
-
-    for faceMatch in response['FaceMatches']:
-
-        position = faceMatch['Face']["BoundingBox"]
-        confidence = str(faceMatch['Face']['Confidence'])
-        print('Verified!')
-        imageSource.close()
-        imageTarget.close()
-        if(faceMatch['Face']['Confidence'] > 70):
-            returnValue = True
-        else:
-            returnValue = False
-    print("return value: ", returnValue)
-    cv2.destroyAllWindows()
-    return returnValue
-
-def expressions():
-    print("Expressions")
-    photo = 'picture.JPEG'
-    client=boto3.client('rekognition')
-
-    response = client.detect_faces(Image={'S3Object':{'Bucket':BUCKET_NAME,'Name':photo}},Attributes=["ALL"])
-    print('Detected faces for ' + photo)
-    for faceDetail in response['FaceDetails']:
-        print('The detected face is between ' + str(faceDetail['AgeRange']['Low'])
-                + ' and ' + str(faceDetail['AgeRange']['High']) + ' years old')
-        print('Here are the emotions:')
-        print(str(faceDetail['Emotions']))
-        #print(json.dumps(faceDetail, indent=4, sort_keys=True))
-
-main()
+app.run()
